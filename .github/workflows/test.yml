@@ -1,0 +1,31 @@
+name: Tests
+
+# Builds with warnings as errors and runs the suite on every push and pull
+# request, so a broken stable is caught before a release is cut from it.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build Shoko.Plugin.TmdbFileMatcher.slnx --configuration Release --no-incremental -warnaserror
+
+      # `dotnet test` exits 0 on a run that discovered nothing, so the report
+      # is parsed rather than the exit code trusted.
+      - name: Run the test suite
+        run: |
+          dotnet test tests/Shoko.Plugin.TmdbFileMatcher.Tests.csproj \
+            --configuration Release --no-build --nologo \
+            --logger "trx;LogFileName=results.trx" \
+            --results-directory "${RUNNER_TEMP}/test-results"
+          python3 scripts/trx-check.py "${RUNNER_TEMP}/test-results/results.trx"
