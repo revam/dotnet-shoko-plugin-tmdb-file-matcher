@@ -8,9 +8,7 @@ and it ships the validator that lets any release link to TMDb.
 It is small on purpose, and meant to be read: a plain plugin showing a
 release provider with non-AniDB cross-references, a cross-reference
 validator with healing, and a required and an optional plugin dependency.
-[docs/how-it-works.md](docs/how-it-works.md) walks through the code. The
-Oborozuki family of plugins has a broader matcher, for more sources than
-TMDb.
+[docs/how-it-works.md](docs/how-it-works.md) walks through the code.
 
 ## What it does
 
