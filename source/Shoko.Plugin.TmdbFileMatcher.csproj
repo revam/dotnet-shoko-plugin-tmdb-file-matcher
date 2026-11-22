@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Library</OutputType>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <Title>TMDb File Matcher</Title>
+        <Authors>revam</Authors>
+        <Version>0.1.0</Version>
+        <Configurations>Debug;Release</Configurations>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    </PropertyGroup>
+
+    <!-- PluginID never changes; the plugin class is generated from these. -->
+    <PropertyGroup Label="Plugin">
+        <PluginGenerateClass>true</PluginGenerateClass>
+        <PluginID>69303ecc-c9b5-431c-94e5-755161badf5d</PluginID>
+        <PluginName>TMDb File Matcher</PluginName>
+        <PluginOverview>Matches files AniDB does not know to TMDb shows, episodes and movies, by the TMDb IDs tagged in their paths or by name and year, and validates the releases that link to TMDb.</PluginOverview>
+        <PluginNamespace>tmdb-file-matcher</PluginNamespace>
+    </PropertyGroup>
+
+    <!-- TMDb is what files are matched to, so it is required; the Offline Importer only reads paths better and judges auto-match rules. -->
+    <ItemGroup>
+        <PluginDependency Include="85d0c34f-240f-4da3-8512-d0b45118a9f4" Version=">=1.3.0" Name="TMDB" />
+        <PluginDependency Include="72a6ff39-2bff-534c-9216-d03cd38e7346" Version="^2.0.0" Optional="true" Name="Offline Importer" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Shoko.Plugin.TmdbFileMatcher.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <!-- The server supplies Shoko.Abstractions; the importer's abstractions ship with the plugin, so its types load when the importer is absent. -->
+    <ItemGroup>
+        <PackageReference Include="Shoko.Abstractions" Version="$(ShokoAbstractionsVersion)" ExcludeAssets="runtime" PrivateAssets="All" />
+        <PackageReference Include="Shoko.Plugin.OfflineImporter.Abstractions" Version="$(OfflineImporterAbstractionsVersion)" />
+        <PackageReference Include="Shoko.BuildTools.Targets" Version="0.8.1" PrivateAssets="All" ExcludeAssets="runtime" />
+    </ItemGroup>
+</Project>

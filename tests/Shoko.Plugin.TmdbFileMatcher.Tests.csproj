@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <Configurations>Debug;Release</Configurations>
+    </PropertyGroup>
+
+    <!-- The server supplies Shoko.Abstractions to the plugin; the test host is not the server, so it brings its own copy. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <ProjectReference Include="../source/Shoko.Plugin.TmdbFileMatcher.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Shoko.Abstractions" Version="$(ShokoAbstractionsVersion)" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+        <PackageReference Include="xunit.v3" Version="3.2.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" PrivateAssets="All" />
+    </ItemGroup>
+</Project>
