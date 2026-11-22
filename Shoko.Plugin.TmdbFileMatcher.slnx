@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/source/">
+    <Project Path="source/Shoko.Plugin.TmdbFileMatcher.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Shoko.Plugin.TmdbFileMatcher.Tests.csproj" />
+  </Folder>
+</Solution>
