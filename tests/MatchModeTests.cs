@@ -199,7 +199,7 @@ public class MatchModeTests
     public async Task AnUntaggedFile_IsLoggedAtDebug_EvenWhenAsked(bool isAutomatic)
     {
         var logger = new ListLogger();
-        var provider = new TmdbReleaseInfoProvider(logger, () => new() { AutoMatchRules = [new()] }, new MatchPipeline(new PathParser(null), Fixtures()), Fake.Of<IOfflineAutoMatchService>(), TimeProvider.System);
+        var provider = new TmdbReleaseInfoProvider(logger, () => new() { AutoMatchRules = [new()] }, new MatchPipeline(new PathParser(null), Fixtures()), Fake.Of<IOfflineAutoMatchService>());
         var file = Fake.Of<IVideoFile>(("get_ManagedFolderID", _ => 1), ("get_RelativePath", _ => Untagged));
         var video = Fake.Of<IVideo>(("get_Files", _ => new[] { file }), ("get_Hashes", _ => Array.Empty<IHashDigest>()));
 

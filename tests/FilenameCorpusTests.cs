@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Shoko.Abstractions.Metadata;
 using Shoko.Abstractions.Metadata.Enums;
+using Shoko.Abstractions.Metadata.Providers;
 using Shoko.Plugin.OfflineImporter.Abstractions.Configuration;
 using Shoko.Plugin.OfflineImporter.Abstractions.Models;
 using Shoko.Plugin.TmdbFileMatcher.Evidence;
@@ -181,43 +182,42 @@ public class FilenameCorpusTests
     }
 
     [Fact]
-    public async Task AnUnreachableTmdb_GivesUnavailable()
+    public async Task AnUnreachableTmdb_Throws_WithItsRetryAfter()
     {
         const string path = "Frieren (2023)/Season 1/Frieren - S01E05.mkv";
         var catalog = Fixtures();
         catalog.Unavailable = true;
 
-        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
+        var exception = await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken));
 
-        Assert.Equal(MatchKind.Unavailable, outcome.Kind);
-        Assert.Equal(TimeSpan.FromMinutes(5), outcome.RetryAfter);
+        Assert.Equal(TimeSpan.FromMinutes(5), exception.RetryAfter);
     }
 
     [Fact]
-    public async Task ARefreshThatRunsOver_GivesUnavailable_EvenWhenCoreIgnoresTheToken()
+    public async Task ARefreshThatRunsOver_Throws_EvenWhenCoreIgnoresTheToken()
     {
         const string path = "Frieren (2023)/Season 1/Frieren - S01E05.mkv";
         var catalog = Fixtures();
         catalog.RefreshHangs = true;
         var pipeline = new MatchPipeline(new PathParser(null), catalog) { RefreshTimeout = TimeSpan.FromMilliseconds(50) };
 
-        var outcome = await pipeline.Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var exception = await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => pipeline.Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
-        Assert.Equal(MatchKind.Unavailable, outcome.Kind);
-        Assert.Contains("took longer", outcome.Reason);
+        Assert.Contains("took longer", exception.Message);
+        Assert.Equal(TimeSpan.FromMinutes(10), exception.RetryAfter);
     }
 
     [Fact]
-    public async Task ARefreshCoreRefuses_GivesUnavailable()
+    public async Task ARefreshCoreRefuses_Throws()
     {
         const string path = "Frieren (2023)/Season 1/Frieren - S01E05.mkv";
         var catalog = Fixtures();
         catalog.RefreshRefused = true;
 
-        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
+        var exception = await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken));
 
-        Assert.Equal(MatchKind.Unavailable, outcome.Kind);
-        Assert.Contains("paused", outcome.Reason);
+        Assert.Contains("paused", exception.Message);
+        Assert.Equal(TimeSpan.FromMinutes(10), exception.RetryAfter);
     }
 
     [Fact]

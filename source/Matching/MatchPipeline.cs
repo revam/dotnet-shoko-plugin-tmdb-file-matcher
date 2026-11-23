@@ -29,8 +29,6 @@ internal enum MatchKind
     Provisional,
     // A tag resolved, or a search was accepted.
     Accepted,
-    // TMDb could not be reached, so nothing can be said yet.
-    Unavailable,
 }
 
 /// <summary>
@@ -41,8 +39,7 @@ internal enum MatchKind
 /// <param name="Evidence">The evidence used, when the file was read.</param>
 /// <param name="References">The cross-references to write.</param>
 /// <param name="Path">How: <c>tag:…</c> or <c>search:…</c>.</param>
-/// <param name="RetryAfter">When to try again, if TMDb said.</param>
-internal sealed record MatchOutcome(MatchKind Kind, string Reason, FileEvidence? Evidence, IReadOnlyList<ReleaseVideoCrossReference> References, string? Path = null, TimeSpan? RetryAfter = null)
+internal sealed record MatchOutcome(MatchKind Kind, string Reason, FileEvidence? Evidence, IReadOnlyList<ReleaseVideoCrossReference> References, string? Path = null)
 {
     // Whether there is something to save.
     public bool IsMatched => Kind is MatchKind.Accepted or MatchKind.Provisional && References.Count > 0;
@@ -69,29 +66,22 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
     // How long placement waits for a show to be fetched.
     public TimeSpan RefreshTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
-    // Matches a file by its locations; the one that says most is read.
+    // Matches a file by its locations; the one that says most is read. An unreachable TMDb throws.
     public async Task<MatchOutcome> Match(IReadOnlyList<FileLocation> locations, TmdbFileMatcherConfiguration config, CancellationToken cancellationToken)
     {
         if (locations.Count is 0)
             return new(MatchKind.None, "The file has no location to read.", null, []);
 
         var file = locations.Select(location => EvidenceReader.Read(location, parser.Parse(location))).MaxBy(evidence => (evidence.IsParsed, evidence.Tags.Count > 0, evidence.SeriesName is not null, evidence.HasEpisodeNumber))!;
-        try
-        {
-            if (file.Tags.Count > 0)
-                return await ByTags(file, config.Mode, cancellationToken).ConfigureAwait(false);
-            if (config.Mode is not MatchMode.Lax)
-                return new(MatchKind.Skipped, "The path carries no TMDb tag, and strict mode matches tagged paths only.", file, []);
-            if (file.SeriesName is null)
-                return new(MatchKind.None, "The path gives no series name to search for.", file, []);
-            if (!file.IsMovieShaped && (file.HasEpisodeNumber || file.HasFractionalEpisode) && SeasonalPlacement.Unplaceable(file) is { } unplaceable)
-                return new(MatchKind.None, unplaceable.How, file, []);
-            return await BySearch(file, config, cancellationToken).ConfigureAwait(false);
-        }
-        catch (MetadataProviderUnavailableException exception)
-        {
-            return new(MatchKind.Unavailable, exception.Message, file, [], RetryAfter: exception.RetryAfter);
-        }
+        if (file.Tags.Count > 0)
+            return await ByTags(file, config.Mode, cancellationToken).ConfigureAwait(false);
+        if (config.Mode is not MatchMode.Lax)
+            return new(MatchKind.Skipped, "The path carries no TMDb tag, and strict mode matches tagged paths only.", file, []);
+        if (file.SeriesName is null)
+            return new(MatchKind.None, "The path gives no series name to search for.", file, []);
+        if (!file.IsMovieShaped && (file.HasEpisodeNumber || file.HasFractionalEpisode) && SeasonalPlacement.Unplaceable(file) is { } unplaceable)
+            return new(MatchKind.None, unplaceable.How, file, []);
+        return await BySearch(file, config, cancellationToken).ConfigureAwait(false);
     }
 
     // The first group of tags taken, from one place in the path; a tag that does not resolve stops the match.

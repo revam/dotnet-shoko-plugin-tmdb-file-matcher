@@ -106,10 +106,10 @@ mode applies alike to automatic matching and to matches you ask for.
   nothing; the name is not searched instead, in any mode.
 - **A show is fetched before a file is placed in it.** The first file of a
   show not yet in Shoko waits up to 30 seconds for a quick refresh of it.
-- **No TMDb, no match.** While TMDb cannot be reached, or the TMDB plugin is
-  paused, files get no match. A file that another provider matched in the
-  meantime is tried again later; one that is left with none waits for its
-  next search.
+- **No TMDb, no answer yet.** While TMDb cannot be reached, or the TMDB
+  plugin is paused, the matcher tells Shoko so instead of answering no
+  match: a search someone asked for fails with TMDb's retry time, and a
+  queued one is retried by Shoko later.
 - **Searches cost requests.** In lax mode, a file can take a few searches,
   and looking up the likeliest hits, before it is matched. They go through
   the TMDB plugin, whose own limits apply, and are kept for an hour, so the

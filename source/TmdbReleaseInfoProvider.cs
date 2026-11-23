@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Shoko.Abstractions.Config;
 using Shoko.Abstractions.Extensions;
+using Shoko.Abstractions.Metadata.Providers;
 using Shoko.Abstractions.Video.Enums;
 using Shoko.Abstractions.Video.Hashing;
 using Shoko.Abstractions.Video.Release;
@@ -23,8 +24,9 @@ namespace Shoko.Plugin.TmdbFileMatcher;
 /// </summary>
 /// <remarks>
 ///   Found by core by its type, and identified by its full name, so it is
-///   never renamed or moved. It never throws: an unreachable TMDb, or a
-///   bug, gives no result.
+///   never renamed or moved. An unreachable TMDb throws core's
+///   <c>MetadataProviderUnavailableException</c>, so Shoko retries the
+///   search later; a bug gives no result.
 /// </remarks>
 public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatcherConfiguration>
 {
@@ -33,18 +35,10 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
     /// </summary>
     public const string ProviderName = "TMDb File Matcher";
 
-    private const int MaxAttempts = 5;
-
-    private static readonly TimeSpan _defaultRescanDelay = TimeSpan.FromHours(1);
-
     private readonly ILogger _logger;
     private readonly Func<TmdbFileMatcherConfiguration> _configuration;
     private readonly MatchPipeline _pipeline;
     private readonly IOfflineAutoMatchService? _autoMatch;
-    private readonly TimeProvider _timeProvider;
-
-    // When TMDb last could not be reached, and when it said to try again.
-    private Tuple<DateTime, TimeSpan?>? _lastUnavailable;
 
     /// <summary>
     ///   Creates the provider over the plugin's services; the Offline
@@ -54,18 +48,17 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
     /// <param name="configuration">The settings.</param>
     /// <param name="serviceProvider">Gives the pipeline and importer.</param>
     public TmdbReleaseInfoProvider(ILogger<TmdbReleaseInfoProvider> logger, ConfigurationProvider<TmdbFileMatcherConfiguration> configuration, IServiceProvider serviceProvider)
-        : this(logger, () => configuration.Load(), serviceProvider.GetRequiredService<MatchPipeline>(), serviceProvider.GetService<IOfflineAutoMatchService>(), TimeProvider.System)
+        : this(logger, () => configuration.Load(), serviceProvider.GetRequiredService<MatchPipeline>(), serviceProvider.GetService<IOfflineAutoMatchService>())
     {
     }
 
     // Creates the provider over a given pipeline and auto-match service, for the tests.
-    internal TmdbReleaseInfoProvider(ILogger logger, Func<TmdbFileMatcherConfiguration> configuration, MatchPipeline pipeline, IOfflineAutoMatchService? autoMatch, TimeProvider timeProvider)
+    internal TmdbReleaseInfoProvider(ILogger logger, Func<TmdbFileMatcherConfiguration> configuration, MatchPipeline pipeline, IOfflineAutoMatchService? autoMatch)
     {
         _logger = logger;
         _configuration = configuration;
         _pipeline = pipeline;
         _autoMatch = autoMatch;
-        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc/>
@@ -98,13 +91,6 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
 
             var locations = video.Files.Select(file => new FileLocation(file.ManagedFolderID, file.RelativePath, file.ManagedFolder)).ToList();
             var outcome = await _pipeline.Match(locations, config, cancellationToken).ConfigureAwait(false);
-            if (outcome.Kind is MatchKind.Unavailable)
-            {
-                Volatile.Write(ref _lastUnavailable, Tuple.Create(_timeProvider.GetLocalNow().DateTime, outcome.RetryAfter));
-                _logger.LogInformation("TMDb cannot be reached; no match for now. ({Reason})", outcome.Reason);
-                return null;
-            }
-
             if (!outcome.IsMatched)
             {
                 _logger.Log(context.IsAutomatic || outcome.Kind is MatchKind.Skipped ? LogLevel.Debug : LogLevel.Information, "No match for {Path}: {Reason}", outcome.Evidence?.Location.NormalizedPath, outcome.Reason);
@@ -124,7 +110,7 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
         {
             return null;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (exception is not MetadataProviderUnavailableException)
         {
             _logger.LogError(exception, "Matching failed for video {VideoID}.", video?.LocalID);
             return null;
@@ -134,21 +120,6 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
     /// <inheritdoc/>
     public Task<ReleaseInfo?> GetReleaseInfoById(string releaseId, CancellationToken cancellationToken)
         => throw new NotSupportedException("The TMDb file matcher's releases are read from a file's path, and have no ID to look up.");
-
-    /// <inheritdoc/>
-    /// <remarks>
-    ///   A rescan follows only an attempt during which TMDb could not be
-    ///   reached, not one that merely came before an outage: after its
-    ///   <c>RetryAfter</c>, or an hour.
-    /// </remarks>
-    public TimeSpan? GetRescanDelay(IReleaseInfo existingInfo, IReleaseMatchAttempt lastAttempt)
-    {
-        if (!lastAttempt.AttemptedProviderNames.Contains(ProviderName) || lastAttempt.AttemptCount >= MaxAttempts)
-            return null;
-        if (Volatile.Read(ref _lastUnavailable) is not { } unavailable || unavailable.Item1 < lastAttempt.AttemptStartedAt)
-            return null;
-        return lastAttempt.IsCompleted && unavailable.Item1 > lastAttempt.AttemptEndedAt ? null : unavailable.Item2 ?? _defaultRescanDelay;
-    }
 
     // Builds the release for a match; a provisional one defers to the next provider.
     internal static ReleaseInfo Build(MatchOutcome outcome, long size, HashDigest[] hashes)

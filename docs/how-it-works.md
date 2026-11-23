@@ -103,7 +103,7 @@ say nothing about which entry the file is.
 
 Nothing kept depends on the mode: only searches are kept by their settings,
 and the strict modes make none, while lookups are of one TMDb ID whatever
-asked for them. The rescan after an outage does not depend on it either.
+asked for them.
 
 ## Tags
 
@@ -161,8 +161,8 @@ episodes:
 when the stored episodes do not hold the file. The wait for it is bounded to
 30 seconds, since core runs an immediate refresh to its end whatever the
 cancellation token says. Running over, or core declining to run it while
-TMDb's provider is paused, is treated as TMDb being unavailable, which gives
-no result.
+TMDb's provider is paused, is treated as TMDb being unavailable, and throws
+as an unreachable TMDb does, to be tried again in ten minutes.
 
 ## The release
 
@@ -177,11 +177,13 @@ are set up. With both, an automatic match is saved only when the importer's
 `IOfflineAutoMatchService` allows it under those rules.
 
 **Unavailable is not unmatched.** When TMDb cannot be reached, the
-provider answers nothing, and `GetRescanDelay` asks core to try again after
-TMDb's `RetryAfter`, or an hour, for an attempt that ran while it could not
-be reached. Core asks that only of a file that has a release, such as one
-another provider found; a file left with none waits for the next search
-of it.
+provider throws core's `MetadataProviderUnavailableException`, with TMDb's
+`RetryAfter` when it gave one, in every mode, automatic or not; it never
+answers no match for it. That is the release provider contract: Shoko
+passes the provider by and asks the next one, a search someone is waiting
+on fails with the retry time when nothing else matched, and a queued
+search is retried later with its attempt left open. Any other failure is
+logged and gives no result.
 
 ## The validator
 

@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Shoko.Abstractions.Metadata.Providers;
 using Shoko.Abstractions.Video;
 using Shoko.Abstractions.Video.Hashing;
 using Shoko.Abstractions.Video.Release;
+using Shoko.Plugin.OfflineImporter.Abstractions.Configuration;
+using Shoko.Plugin.OfflineImporter.Abstractions.Services;
 using Shoko.Plugin.TmdbFileMatcher.Evidence;
 using Shoko.Plugin.TmdbFileMatcher.Matching;
 using Xunit;
@@ -10,57 +13,77 @@ using static Shoko.Plugin.TmdbFileMatcher.Tests.Tmdb;
 namespace Shoko.Plugin.TmdbFileMatcher.Tests;
 
 /// <summary>
-///   The release provider over the fake catalog: when core is asked to
-///   look again after TMDb could not be reached.
+///   The release provider over the fake catalog: a TMDb that cannot be
+///   reached is thrown to core, in every mode, asked for or not, so Shoko
+///   retries the search instead of taking it as no match.
 /// </summary>
 public class ReleaseProviderTests
 {
-    private static readonly DateTime _outage = new(2026, 11, 23, 10, 0, 0);
+    private const string Tagged = "Sample Show (2024) [tmdbid-tv12345]/Season 01/Sample Show - S01E03 [tmdb-e1234501003].mkv";
 
-    private sealed class FixedTime(DateTime now) : TimeProvider
+    public static TheoryData<MatchMode, bool> EveryMode => new()
     {
-        public override DateTimeOffset GetUtcNow()
-            => new(now, TimeSpan.Zero);
+        { MatchMode.Lax, false },
+        { MatchMode.Lax, true },
+        { MatchMode.StrictAndInfo, false },
+        { MatchMode.StrictAndInfo, true },
+        { MatchMode.StrictAndFast, false },
+        { MatchMode.StrictAndFast, true },
+    };
 
-        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    private static Task<ReleaseInfo?> Ask(FakeCatalog catalog, MatchMode mode, bool isAutomatic, TimeSpan? refreshTimeout = null)
+    {
+        var pipeline = new MatchPipeline(new PathParser(null), catalog) { RefreshTimeout = refreshTimeout ?? TimeSpan.FromSeconds(30) };
+        var provider = new TmdbReleaseInfoProvider(NullLogger.Instance, () => new() { Mode = mode, AutoMatchRules = [new AutoMatchRule()] }, pipeline, Fake.Of<IOfflineAutoMatchService>());
+        var file = Fake.Of<IVideoFile>(("get_ManagedFolderID", _ => 1), ("get_RelativePath", _ => Tagged));
+        var video = Fake.Of<IVideo>(("get_Files", _ => new[] { file }), ("get_Hashes", _ => Array.Empty<IHashDigest>()));
+        return provider.GetReleaseInfoForVideo(new() { Video = video, IsAutomatic = isAutomatic }, TestContext.Current.CancellationToken);
     }
 
-    private static async Task<TmdbReleaseInfoProvider> AfterAnOutage()
+    [Theory]
+    [MemberData(nameof(EveryMode))]
+    public async Task AnUnreachableTmdb_IsThrown_WithItsRetryAfter(MatchMode mode, bool isAutomatic)
     {
         var catalog = Fixtures();
         catalog.Unavailable = true;
-        var provider = new TmdbReleaseInfoProvider(NullLogger.Instance, () => Modes.Lax, new MatchPipeline(new PathParser(null), catalog), null, new FixedTime(_outage));
-        var file = Fake.Of<IVideoFile>(("get_ManagedFolderID", _ => 1), ("get_RelativePath", _ => "Frieren (2023)/Season 1/Frieren - S01E05.mkv"));
-        var video = Fake.Of<IVideo>(("get_Files", _ => new[] { file }), ("get_Hashes", _ => Array.Empty<IHashDigest>()));
 
-        Assert.Null(await provider.GetReleaseInfoForVideo(new() { Video = video, IsAutomatic = false }, TestContext.Current.CancellationToken));
-        return provider;
+        var exception = await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => Ask(catalog, mode, isAutomatic));
+
+        Assert.Equal(TimeSpan.FromMinutes(5), exception.RetryAfter);
     }
 
-    private static IReleaseMatchAttempt Attempt(DateTime startedAt, DateTime endedAt, bool isCompleted)
-        => Fake.Of<IReleaseMatchAttempt>(
-            ("get_AttemptedProviderNames", _ => new[] { TmdbReleaseInfoProvider.ProviderName }),
-            ("get_AttemptCount", _ => 1),
-            ("get_AttemptStartedAt", _ => startedAt),
-            ("get_AttemptEndedAt", _ => endedAt),
-            ("get_IsCompleted", _ => isCompleted)
-        );
-
-    [Fact]
-    public async Task AnAttemptDuringTheOutage_IsScannedAgainAfterItsRetryAfter()
+    [Theory]
+    [MemberData(nameof(EveryMode))]
+    public async Task ARefreshCoreRefuses_IsThrown(MatchMode mode, bool isAutomatic)
     {
-        var provider = await AfterAnOutage();
+        var catalog = Fixtures();
+        catalog.RefreshRefused = true;
 
-        Assert.Equal(TimeSpan.FromMinutes(5), provider.GetRescanDelay(Fake.Of<IReleaseInfo>(), Attempt(_outage.AddMinutes(-1), _outage.AddMinutes(1), true)));
-        Assert.Equal(TimeSpan.FromMinutes(5), provider.GetRescanDelay(Fake.Of<IReleaseInfo>(), Attempt(_outage.AddMinutes(-1), _outage.AddMinutes(-1), false)));
+        var exception = await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => Ask(catalog, mode, isAutomatic));
+
+        Assert.Contains("paused", exception.Message);
+        Assert.Equal(TimeSpan.FromMinutes(10), exception.RetryAfter);
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryMode))]
+    public async Task ARefreshThatRunsOver_IsThrown(MatchMode mode, bool isAutomatic)
+    {
+        var catalog = Fixtures();
+        catalog.RefreshHangs = true;
+
+        var exception = await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => Ask(catalog, mode, isAutomatic, TimeSpan.FromMilliseconds(50)).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+
+        Assert.Contains("took longer", exception.Message);
+        Assert.Equal(TimeSpan.FromMinutes(10), exception.RetryAfter);
     }
 
     [Fact]
-    public async Task AnAttemptThatEndedBeforeTheOutage_IsNotScannedAgain()
+    public async Task AReachableTmdb_StillMatches()
     {
-        var provider = await AfterAnOutage();
+        var release = await Ask(Fixtures(), MatchMode.StrictAndFast, false);
 
-        Assert.Null(provider.GetRescanDelay(Fake.Of<IReleaseInfo>(), Attempt(_outage.AddHours(-1), _outage.AddMinutes(-55), true)));
-        Assert.Null(provider.GetRescanDelay(Fake.Of<IReleaseInfo>(), Attempt(_outage.AddMinutes(1), _outage.AddMinutes(2), true)));
+        Assert.NotNull(release);
+        Assert.NotEmpty(release.CrossReferences);
     }
 }

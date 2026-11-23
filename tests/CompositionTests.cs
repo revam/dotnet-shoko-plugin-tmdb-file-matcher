@@ -76,8 +76,7 @@ public class CompositionTests
             NullLogger.Instance,
             () => new() { AutoMatchRules = [.. Enumerable.Range(0, rules).Select(_ => new AutoMatchRule())] },
             provider.GetRequiredService<MatchPipeline>(),
-            provider.GetService<IOfflineAutoMatchService>(),
-            TimeProvider.System
+            provider.GetService<IOfflineAutoMatchService>()
         );
 
         Assert.Equal(expected, releaseProvider.CannotAutoMatchReason);
