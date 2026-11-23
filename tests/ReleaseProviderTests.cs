@@ -29,7 +29,7 @@ public class ReleaseProviderTests
     {
         var catalog = Fixtures();
         catalog.Unavailable = true;
-        var provider = new TmdbReleaseInfoProvider(NullLogger.Instance, () => new(), new MatchPipeline(new PathParser(null), catalog), null, new FixedTime(_outage));
+        var provider = new TmdbReleaseInfoProvider(NullLogger.Instance, () => Modes.Lax, new MatchPipeline(new PathParser(null), catalog), null, new FixedTime(_outage));
         var file = Fake.Of<IVideoFile>(("get_ManagedFolderID", _ => 1), ("get_RelativePath", _ => "Frieren (2023)/Season 1/Frieren - S01E05.mkv"));
         var video = Fake.Of<IVideo>(("get_Files", _ => new[] { file }), ("get_Hashes", _ => Array.Empty<IHashDigest>()));
 

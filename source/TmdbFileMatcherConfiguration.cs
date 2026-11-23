@@ -9,9 +9,9 @@ using Shoko.Plugin.OfflineImporter.Abstractions.Configuration;
 namespace Shoko.Plugin.TmdbFileMatcher;
 
 /// <summary>
-///   The settings of the TMDb file matcher: the scores a match needs,
-///   whether restricted entries may match, and the rules that allow
-///   automatic matching.
+///   The settings of the TMDb file matcher: how strictly it matches, the
+///   scores a match needs, whether restricted entries may match, and the
+///   rules that allow automatic matching.
 /// </summary>
 /// <remarks>
 ///   Identified by its full name, so it is never renamed or moved.
@@ -19,7 +19,17 @@ namespace Shoko.Plugin.TmdbFileMatcher;
 public sealed class TmdbFileMatcherConfiguration : IReleaseInfoProviderConfiguration, INewtonsoftJsonConfiguration, IConfigurationWithCustomValidation<TmdbFileMatcherConfiguration>
 {
     /// <summary>
-    ///   The score a candidate needs to be accepted, leading the next by 10.
+    ///   How strictly files are matched: lax searches by name and year when
+    ///   a path has no TMDb tag, and the two strict modes act only on tagged
+    ///   paths. The Offline Importer's own modes, so they read alike.
+    /// </summary>
+    [Display(Name = "Match mode")]
+    [DefaultValue(MatchMode.StrictAndInfo)]
+    public MatchMode Mode { get; set; } = MatchMode.StrictAndInfo;
+
+    /// <summary>
+    ///   The score a search hit needs to be accepted, leading the next by
+    ///   10. Lax mode only.
     /// </summary>
     [Display(Name = "Accept score")]
     [DefaultValue(80)]
@@ -27,8 +37,8 @@ public sealed class TmdbFileMatcherConfiguration : IReleaseInfoProviderConfigura
     public int AcceptScore { get; set; } = 80;
 
     /// <summary>
-    ///   The score a candidate needs to be saved provisionally, leaving the
-    ///   next release provider to carry on.
+    ///   The score a search hit needs to be saved provisionally, leaving the
+    ///   next release provider to carry on. Lax mode only.
     /// </summary>
     [Display(Name = "Provisional score")]
     [DefaultValue(60)]

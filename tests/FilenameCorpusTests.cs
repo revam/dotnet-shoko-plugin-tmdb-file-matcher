@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Shoko.Abstractions.Metadata;
 using Shoko.Abstractions.Metadata.Enums;
+using Shoko.Plugin.OfflineImporter.Abstractions.Configuration;
 using Shoko.Plugin.OfflineImporter.Abstractions.Models;
 using Shoko.Plugin.TmdbFileMatcher.Evidence;
 using Shoko.Plugin.TmdbFileMatcher.Matching;
@@ -147,7 +148,7 @@ public class FilenameCorpusTests
         expected.Arrange?.Invoke(catalog);
         var parser = new PathParser(Fake.Importer(new Dictionary<string, ParsedFileResult> { [expected.Path] = expected.Parsed }));
 
-        var outcome = await Pipeline(catalog, parser).Match([new FileLocation(1, expected.Path)], new(), TestContext.Current.CancellationToken);
+        var outcome = await Pipeline(catalog, parser).Match([new FileLocation(1, expected.Path)], Modes.Lax, TestContext.Current.CancellationToken);
 
         Assert.True(expected.Kind == outcome.Kind, $"{outcome.Kind}: {outcome.Reason}");
         Assert.Equal(expected.Taken, outcome.Path);
@@ -160,7 +161,7 @@ public class FilenameCorpusTests
         const string path = "Hunter x Hunter/Hunter x Hunter - 05.mkv";
         var parser = new PathParser(Fake.Importer(new Dictionary<string, ParsedFileResult> { [path] = File(path, "Hunter x Hunter", episode: 5) }));
 
-        var outcome = await Pipeline(Fixtures(), parser).Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+        var outcome = await Pipeline(Fixtures(), parser).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
 
         Assert.True(TmdbReleaseInfoProvider.Build(outcome, 1, []).DeferToNext);
         Assert.False(TmdbReleaseInfoProvider.Build(outcome with { Kind = MatchKind.Accepted }, 1, []).DeferToNext);
@@ -173,7 +174,7 @@ public class FilenameCorpusTests
         var catalog = Fixtures();
         var parser = new PathParser(Fake.Importer(new Dictionary<string, ParsedFileResult> { [path] = File(path, "Tokyo Revers", 4, 2) }));
 
-        var outcome = await Pipeline(catalog, parser).Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+        var outcome = await Pipeline(catalog, parser).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
 
         Assert.Contains("series:Tokyo Revengers:", catalog.Searches);
         Assert.Equal(MatchKind.None, outcome.Kind);
@@ -186,7 +187,7 @@ public class FilenameCorpusTests
         var catalog = Fixtures();
         catalog.Unavailable = true;
 
-        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
 
         Assert.Equal(MatchKind.Unavailable, outcome.Kind);
         Assert.Equal(TimeSpan.FromMinutes(5), outcome.RetryAfter);
@@ -200,7 +201,7 @@ public class FilenameCorpusTests
         catalog.RefreshHangs = true;
         var pipeline = new MatchPipeline(new PathParser(null), catalog) { RefreshTimeout = TimeSpan.FromMilliseconds(50) };
 
-        var outcome = await pipeline.Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var outcome = await pipeline.Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         Assert.Equal(MatchKind.Unavailable, outcome.Kind);
         Assert.Contains("took longer", outcome.Reason);
@@ -213,7 +214,7 @@ public class FilenameCorpusTests
         var catalog = Fixtures();
         catalog.RefreshRefused = true;
 
-        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
 
         Assert.Equal(MatchKind.Unavailable, outcome.Kind);
         Assert.Contains("paused", outcome.Reason);
@@ -227,8 +228,8 @@ public class FilenameCorpusTests
         var catalog = Fixtures().Add(new FakeShow(hidden.Entry with { IsRestricted = true }, hidden.Episodes, false));
         var pipeline = Pipeline(catalog, new PathParser(null));
 
-        var without = await pipeline.Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
-        var with = await pipeline.Match([new FileLocation(1, path)], new() { IncludeRestricted = true }, TestContext.Current.CancellationToken);
+        var without = await pipeline.Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
+        var with = await pipeline.Match([new FileLocation(1, path)], new() { Mode = MatchMode.Lax, IncludeRestricted = true }, TestContext.Current.CancellationToken);
 
         Assert.Equal(MatchKind.None, without.Kind);
         Assert.Equal(MatchKind.Accepted, with.Kind);

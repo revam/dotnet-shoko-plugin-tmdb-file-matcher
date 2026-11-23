@@ -2,6 +2,7 @@ using System.Reflection;
 using Shoko.Abstractions.Metadata;
 using Shoko.Abstractions.Metadata.Enums;
 using Shoko.Abstractions.Metadata.Providers;
+using Shoko.Plugin.OfflineImporter.Abstractions.Configuration;
 using Shoko.Plugin.OfflineImporter.Abstractions.Models;
 using Shoko.Plugin.OfflineImporter.Abstractions.Services;
 using Shoko.Plugin.TmdbFileMatcher.Catalog;
@@ -251,4 +252,16 @@ internal static class Tmdb
 
     public static SourceEntry MovieEntry(string id, string title, int year, string? original = null)
         => new(Movie(id), [.. new[] { title, original }.OfType<string>()], year, false);
+}
+
+/// <summary>
+///   The settings in each match mode, the rest left as they come.
+/// </summary>
+internal static class Modes
+{
+    public static TmdbFileMatcherConfiguration Lax => new() { Mode = MatchMode.Lax };
+
+    public static TmdbFileMatcherConfiguration StrictAndInfo => new() { Mode = MatchMode.StrictAndInfo };
+
+    public static TmdbFileMatcherConfiguration StrictAndFast => new() { Mode = MatchMode.StrictAndFast };
 }

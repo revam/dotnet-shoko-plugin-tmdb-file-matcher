@@ -8,6 +8,7 @@ using Shoko.Abstractions.Extensions;
 using Shoko.Abstractions.Metadata;
 using Shoko.Abstractions.Metadata.Providers;
 using Shoko.Abstractions.Video.Release;
+using Shoko.Plugin.OfflineImporter.Abstractions.Configuration;
 using Shoko.Plugin.OfflineImporter.Abstractions.Models;
 using Shoko.Plugin.TmdbFileMatcher.Catalog;
 using Shoko.Plugin.TmdbFileMatcher.Evidence;
@@ -22,6 +23,8 @@ internal enum MatchKind
 {
     // Nothing matched, or a tag did not resolve.
     None,
+    // The match mode left the file alone: no tag, or a tag that cannot decide alone.
+    Skipped,
     // A match below the accept score, or without its lead.
     Provisional,
     // A tag resolved, or a search was accepted.
@@ -47,7 +50,7 @@ internal sealed record MatchOutcome(MatchKind Kind, string Reason, FileEvidence?
 
 /// <summary>
 ///   Matches a file to TMDb: evidence from its path, then its tags, then a
-///   name and year search, then placement in the show.
+///   name and year search in lax mode, then placement in the show.
 /// </summary>
 /// <param name="parser">Reads paths.</param>
 /// <param name="catalog">What core knows of TMDb.</param>
@@ -76,7 +79,9 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
         try
         {
             if (file.Tags.Count > 0)
-                return await ByTags(file, cancellationToken).ConfigureAwait(false);
+                return await ByTags(file, config.Mode, cancellationToken).ConfigureAwait(false);
+            if (config.Mode is not MatchMode.Lax)
+                return new(MatchKind.Skipped, "The path carries no TMDb tag, and strict mode matches tagged paths only.", file, []);
             if (file.SeriesName is null)
                 return new(MatchKind.None, "The path gives no series name to search for.", file, []);
             if (!file.IsMovieShaped && (file.HasEpisodeNumber || file.HasFractionalEpisode) && SeasonalPlacement.Unplaceable(file) is { } unplaceable)
@@ -90,19 +95,29 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
     }
 
     // The first group of tags taken, from one place in the path; a tag that does not resolve stops the match.
-    private async Task<MatchOutcome> ByTags(FileEvidence file, CancellationToken cancellationToken)
+    private async Task<MatchOutcome> ByTags(FileEvidence file, MatchMode mode, CancellationToken cancellationToken)
     {
         var first = file.Tags[0];
         var group = file.Tags.Where(tag => tag.Depth == first.Depth && tag.IsForced == first.IsForced).ToList();
         var episodes = group.Where(tag => tag.Type == MetadataEntityType.Episode).ToList();
         var series = group.FirstOrDefault(tag => tag.Type == MetadataEntityType.Series) ?? (episodes.Count > 0 ? file.Tags.FirstOrDefault(tag => tag.Type == MetadataEntityType.Series) : null);
+        // Without extra info the tag alone decides, so a show is placed into only by its tagged episodes.
+        var tagAlone = mode is MatchMode.StrictAndFast;
         Placement placement;
         if (episodes.Count > 0)
             placement = await ResolveEpisodes(episodes, series is null ? null : Guid(series, MetadataEntityType.Series), cancellationToken).ConfigureAwait(false);
+        else if (series is not null && tagAlone)
+            return new(MatchKind.Skipped, $"The TMDb tag names the show {Guid(series, MetadataEntityType.Series)} but no episode, and strict mode without extra info does not place by the file name.", file, []);
         else if (series is not null)
             placement = await Place(Guid(series, MetadataEntityType.Series), file, null, cancellationToken).ConfigureAwait(false);
         else if (group.FirstOrDefault(tag => tag.Type == MetadataEntityType.Movie) is { } movie)
             placement = await ResolveMovie(movie, cancellationToken).ConfigureAwait(false);
+        else if (tagAlone)
+        {
+            placement = await ResolveMovie(first, cancellationToken).ConfigureAwait(false);
+            if (!placement.IsPlaced)
+                return new(MatchKind.Skipped, $"The bare TMDb tag {first.ID} is not a movie ({placement.How}), and as a show it names no episode, which strict mode without extra info does not take from the file name.", file, []);
+        }
         else
             placement = await ResolveBare(first, file, cancellationToken).ConfigureAwait(false);
 

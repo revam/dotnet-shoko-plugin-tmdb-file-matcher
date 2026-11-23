@@ -18,8 +18,8 @@ namespace Shoko.Plugin.TmdbFileMatcher;
 
 /// <summary>
 ///   Matches files to TMDb shows, episodes and movies, by the TMDb IDs
-///   tagged in their paths or by name and year, and gives core a release
-///   whose cross-references name them.
+///   tagged in their paths or, in lax mode, by name and year, and gives
+///   core a release whose cross-references name them.
 /// </summary>
 /// <remarks>
 ///   Found by core by its type, and identified by its full name, so it is
@@ -74,9 +74,10 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
     /// <inheritdoc/>
     public string Description => """
         Matches files AniDB does not know to TMDb shows, episodes and movies,
-        by the TMDb IDs tagged in their paths or by name and year. It matches
-        automatically only where the auto-match rules allow, which the
-        Offline Importer judges.
+        by the TMDb IDs tagged in their paths. In lax mode it also searches
+        untagged files by name and year; the strict modes, the default, leave
+        them alone. It matches automatically only where the auto-match rules
+        allow, which the Offline Importer judges.
     """;
 
     /// <inheritdoc/>
@@ -106,7 +107,7 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
 
             if (!outcome.IsMatched)
             {
-                _logger.Log(context.IsAutomatic ? LogLevel.Debug : LogLevel.Information, "No match for {Path}: {Reason}", outcome.Evidence?.Location.NormalizedPath, outcome.Reason);
+                _logger.Log(context.IsAutomatic || outcome.Kind is MatchKind.Skipped ? LogLevel.Debug : LogLevel.Information, "No match for {Path}: {Reason}", outcome.Evidence?.Location.NormalizedPath, outcome.Reason);
                 return null;
             }
 

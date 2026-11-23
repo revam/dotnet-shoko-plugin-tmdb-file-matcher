@@ -60,7 +60,7 @@ public class BuiltInParserTests
     [InlineData("Unrecognized/Auto Scan/Series/TANK.CHAIR.S01E05.1080p.AMZN.WEB-DL.DUAL.DDP5.1.H.264-VARYG.mkv", "tmdb://episode/32037701005+tmdb://series/320377")]
     public async Task WithoutTheImporter_CommonPathsStillMatch(string path, string reference)
     {
-        var outcome = await FilenameCorpusTests.Pipeline(Fixtures(), new PathParser(null)).Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+        var outcome = await FilenameCorpusTests.Pipeline(Fixtures(), new PathParser(null)).Match([new FileLocation(1, path)], Modes.Lax, TestContext.Current.CancellationToken);
 
         Assert.True(outcome.Kind is MatchKind.Accepted, $"{outcome.Kind}: {outcome.Reason}");
         Assert.Equal([reference], FilenameCorpusTests.References(outcome));
