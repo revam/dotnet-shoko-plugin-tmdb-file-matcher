@@ -41,8 +41,8 @@ internal interface ITmdbCatalog
     // Whether the server stores a show or a movie.
     bool IsStored(MetadataGuid id);
 
-    // Fetches a show into the store with a quick refresh and no images, waiting for it to finish.
-    Task Refresh(MetadataGuid seriesID, CancellationToken cancellationToken);
+    // Fetches a show into the store with a quick refresh and no images, waiting for it to finish; false when core did not run it.
+    Task<bool> Refresh(MetadataGuid seriesID, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -133,7 +133,7 @@ internal sealed class TmdbCatalog(IMetadataLinkingService linkingService, IMetad
     public bool IsStored(MetadataGuid id)
         => id.EntityType == MetadataEntityType.Movie ? metadataService.GetMovie(id) is not null : metadataService.GetSeries(id) is not null;
 
-    public Task Refresh(MetadataGuid seriesID, CancellationToken cancellationToken)
+    public Task<bool> Refresh(MetadataGuid seriesID, CancellationToken cancellationToken)
         => refreshService.RefreshEntry(seriesID, force: false, options: _refreshOptions, immediate: true, cancellationToken: cancellationToken);
 
     private static SourceEntry FromSeries(MetadataSeriesSearchResult result)

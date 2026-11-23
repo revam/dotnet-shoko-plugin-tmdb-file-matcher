@@ -53,7 +53,7 @@ internal sealed record MatchOutcome(MatchKind Kind, string Reason, FileEvidence?
 /// <param name="catalog">What core knows of TMDb.</param>
 internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
 {
-    private static readonly TimeSpan _refreshTimeoutRetry = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan _refreshRetry = TimeSpan.FromMinutes(10);
 
     private static readonly TimeSpan _keepFor = TimeSpan.FromHours(1);
 
@@ -229,19 +229,22 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
         return SeasonalPlacement.Place(seriesID, episodes, file, seasonHint);
     }
 
-    // A refresh bounded by RefreshTimeout; running over is TMDb being unavailable for now.
+    // A refresh waited on for at most RefreshTimeout; running over, or core not running it, is TMDb being unavailable for now.
     private async Task Refresh(MetadataGuid seriesID, CancellationToken cancellationToken)
     {
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        bounded.CancelAfter(RefreshTimeout);
+        bool ran;
         try
         {
-            await catalog.Refresh(seriesID, bounded.Token).ConfigureAwait(false);
+            // Core runs an immediate refresh to its end whatever the token says, so the wait is bounded rather than the refresh.
+            ran = await catalog.Refresh(seriesID, cancellationToken).WaitAsync(RefreshTimeout, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (TimeoutException)
         {
-            throw new MetadataProviderUnavailableException(MetadataSource.TMDB, $"Fetching {seriesID} took longer than {RefreshTimeout.TotalSeconds:0} s.", _refreshTimeoutRetry);
+            throw new MetadataProviderUnavailableException(MetadataSource.TMDB, $"Fetching {seriesID} took longer than {RefreshTimeout.TotalSeconds:0} s.", _refreshRetry);
         }
+
+        if (!ran)
+            throw new MetadataProviderUnavailableException(MetadataSource.TMDB, $"Core did not fetch {seriesID}: TMDb's provider is paused, or does not refresh shows.", _refreshRetry);
     }
 
     private async Task<SourceEntry?> Lookup(MetadataGuid id, CancellationToken cancellationToken)

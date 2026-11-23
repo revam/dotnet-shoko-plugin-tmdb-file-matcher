@@ -127,9 +127,11 @@ episodes:
 - `S00` and specials in season 0.
 
 `MatchPipeline.Place` refreshes the show first when it is not stored, or
-when the stored episodes do not hold the file. The refresh is bounded to 30
-seconds; running over is treated as TMDb being unavailable, which gives no
-result and a rescan later.
+when the stored episodes do not hold the file. The wait for it is bounded to
+30 seconds, since core runs an immediate refresh to its end whatever the
+cancellation token says. Running over, or core declining to run it while
+TMDb's provider is paused, is treated as TMDb being unavailable, which gives
+no result.
 
 ## The release
 

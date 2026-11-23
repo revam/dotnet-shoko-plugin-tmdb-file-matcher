@@ -105,6 +105,12 @@ internal sealed class FakeCatalog : ITmdbCatalog
 
     public bool Unavailable { get; set; }
 
+    // Whether core refuses to run a refresh, as it does while TMDb's provider is paused.
+    public bool RefreshRefused { get; set; }
+
+    // A refresh that never ends, whatever its token says, as core's immediate refreshes ignore it.
+    public bool RefreshHangs { get; set; }
+
     public FakeCatalog Add(FakeShow show)
     {
         Shows[show.Entry.ID] = show;
@@ -151,13 +157,17 @@ internal sealed class FakeCatalog : ITmdbCatalog
     public bool IsStored(MetadataGuid id)
         => id.EntityType == MetadataEntityType.Movie ? StoredMovies.Contains(id) : GetEpisodes(id) is not null;
 
-    public Task Refresh(MetadataGuid seriesID, CancellationToken cancellationToken)
+    public Task<bool> Refresh(MetadataGuid seriesID, CancellationToken cancellationToken)
     {
         ThrowIfUnavailable();
+        if (RefreshRefused)
+            return Task.FromResult(false);
+        if (RefreshHangs)
+            return new TaskCompletionSource<bool>().Task;
         Refreshes.Add(seriesID);
         if (Shows.TryGetValue(seriesID, out var show))
             show.Stored = true;
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     private void ThrowIfUnavailable()

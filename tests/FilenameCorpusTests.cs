@@ -192,6 +192,33 @@ public class FilenameCorpusTests
         Assert.Equal(TimeSpan.FromMinutes(5), outcome.RetryAfter);
     }
 
+    [Fact]
+    public async Task ARefreshThatRunsOver_GivesUnavailable_EvenWhenCoreIgnoresTheToken()
+    {
+        const string path = "Frieren (2023)/Season 1/Frieren - S01E05.mkv";
+        var catalog = Fixtures();
+        catalog.RefreshHangs = true;
+        var pipeline = new MatchPipeline(new PathParser(null), catalog) { RefreshTimeout = TimeSpan.FromMilliseconds(50) };
+
+        var outcome = await pipeline.Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Assert.Equal(MatchKind.Unavailable, outcome.Kind);
+        Assert.Contains("took longer", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task ARefreshCoreRefuses_GivesUnavailable()
+    {
+        const string path = "Frieren (2023)/Season 1/Frieren - S01E05.mkv";
+        var catalog = Fixtures();
+        catalog.RefreshRefused = true;
+
+        var outcome = await Pipeline(catalog, new PathParser(null)).Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(MatchKind.Unavailable, outcome.Kind);
+        Assert.Contains("paused", outcome.Reason);
+    }
+
     [Theory]
     [InlineData("Tokyo.Revengers.S04E02.Be.Left.Behind.the.Times.1080p.DSNP.WEB-DL.AAC2.0.H.264-NTb.mkv", "Tokyo Revengers")]
     [InlineData("Bleach.S17E50.Thousand-Year.Blood.War.DEATH.and.STRAWBERRY.1080p.DSNP.WEB-DL.AAC2.0.H.264-NTb.mkv", "Bleach")]
