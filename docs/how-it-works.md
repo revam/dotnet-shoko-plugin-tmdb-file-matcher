@@ -3,7 +3,7 @@
 A walk through the plugin, in the order a file goes through it:
 
 ```
-file → evidence → tags → search → score → placement → release → validator
+file → evidence → tags → search (lax only) → score → placement → release → validator
 ```
 
 Every path below is under `source/`.
@@ -33,7 +33,8 @@ The dependencies are `PluginDependency` items in
 `Optional="true"`. `shoko-build` copies them into the manifest's release
 entry. The importer's abstractions package is a plain `PackageReference`, so
 its assembly ships in the plugin's archive and its types load whether or not
-the importer is installed.
+the importer is installed. The match modes need nothing more of it: without
+it, the built-in parser reads the tags strict mode acts on.
 
 ## The catalog
 
@@ -58,6 +59,11 @@ the validator over a fake (`tests/Fakes.cs`).
 segment, `SxxEyy` and `SxxEyy-Eyy`, `Name - NN`, a leading `[Group]`, and a
 `(Year)` in the file name; anything else is a bare name, as a movie's is.
 
+Either way the tags come out as the importer's `TaggedMetadataID`s, so the
+match modes behave the same with the importer and without it. The importer's
+grammar reads more, a show and its episode in one tag and a part of a file;
+the built-in one reads one ID per tag.
+
 `Evidence/EvidenceReader.cs` turns the parse into a `FileEvidence`
 (`Evidence/FileEvidence.cs`):
 
@@ -76,6 +82,29 @@ segment, `SxxEyy` and `SxxEyy-Eyy`, `Name - NN`, a leading `[Group]`, and a
 A video with several files is read at every location, and the reading that
 says most is used.
 
+## Match modes
+
+`MatchPipeline.Match` reads the mode from the settings, the Offline
+Importer's own `MatchMode`, so its three values and their names are the
+importer's:
+
+- **`Lax`:** tags, then a search for an untagged file.
+- **`StrictAndInfo`, the default:** tags only. An untagged file ends as
+  `MatchKind.Skipped`, and nothing is searched; a show tag still takes its
+  episode from the file name, as the importer's mode still takes details from
+  its parse.
+- **`StrictAndFast`:** the tag alone decides. Episode and movie tags resolve
+  as in the other modes; a show tag without episode tags is `Skipped`, and a
+  bare tag is tried as a movie only, since as a show it names no episode.
+
+`Skipped` is logged at debug, asked for or not. The release details the
+parse gives, its group, source and version, are copied in every mode: they
+say nothing about which entry the file is.
+
+Nothing kept depends on the mode: only searches are kept by their settings,
+and the strict modes make none, while lookups are of one TMDb ID whatever
+asked for them. The rescan after an outage does not depend on it either.
+
 ## Tags
 
 `MatchPipeline.ByTags`, in `Matching/MatchPipeline.cs`, takes the first group
@@ -83,10 +112,12 @@ of tags, those from one place in the path:
 
 - **episodes** (`e`) must be stored, after one refresh of the tagged show, and
   belong to it;
-- **a show** (`tv`, `s` or `a`) is placed into, as a search hit would be;
+- **a show** (`tv`, `s` or `a`) is placed into, as a search hit would be,
+  but not in `StrictAndFast`;
 - **a movie** (`m`) must be stored or found by a lookup;
 - **a bare number** is tried as a show first when the file has an episode
-  number, and as a movie first when it does not.
+  number, and as a movie first when it does not; in `StrictAndFast`, as a
+  movie only.
 
 A tag that does not resolve ends the match with nothing. A tag is the user's
 word, and a guess past it would overrule them.
@@ -98,7 +129,7 @@ the name, the name without a season suffix such as `S2`, `2nd Season` or `II`,
 the name without its subtitle, the file name's own reading, and the folder's
 name. A stripped suffix also gives a season hint.
 
-`MatchPipeline.BySearch` searches shows or movies, the likelier first, and
+In lax mode only, `MatchPipeline.BySearch` searches shows or movies, the likelier first, and
 each search of the plan in turn, stopping at the first accepted candidate.
 The three best hits of a search that lack their seasons, or whose titles do
 not match, are looked up for what a search leaves out. Searches and lookups
@@ -174,9 +205,11 @@ healing, nothing is looked up and nothing is refused.
 
 ## Settings
 
-`TmdbFileMatcherConfiguration.cs` holds the two scores, whether restricted
-entries may match, and the auto-match rules, the importer's own
-`AutoMatchRule`. Core draws its settings page from the class, and refuses
+`TmdbFileMatcherConfiguration.cs` holds the match mode, the importer's own
+`MatchMode` with `StrictAndInfo` as the default, the two scores, whether
+restricted entries may match, and the auto-match rules, the importer's own
+`AutoMatchRule`. A setting missing from a stored file takes its default, so
+an install from before the mode existed is strict. Core draws its settings page from the class, and refuses
 at start-up a shape its schema generator cannot draw;
 `tests/ConfigurationSchemaRulesTests.cs` mirrors those rules.
 
@@ -185,6 +218,9 @@ at start-up a shape its schema generator cannot draw;
 - `FilenameCorpusTests`: paths, the importer's parse of each, and what they
   link to, with real file names from a test server.
 - `BuiltInParserTests`: the same shapes without the importer.
+- `MatchModeTests`: each mode, with the importer and without it: tags in a
+  file name and in a folder, show tags with and without an episode, movie
+  tags, and untagged files.
 - `ValidatorTests`: every rule, saving and healing.
 - `ConfigurationSchemaRulesTests`: core's schema rules.
 - `CompositionTests`: the provider and the validator built as core builds
