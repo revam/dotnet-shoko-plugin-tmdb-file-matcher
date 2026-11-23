@@ -5,6 +5,11 @@ name: Tests
 
 on:
   push:
+    # The metadata branch holds the published manifest and no code. The
+    # release workflow's own pushes there start no runs anyway, but the hand
+    # seeding and any hand fix would fail a build of a tree with no project.
+    branches-ignore:
+      - metadata
   pull_request:
 
 jobs:

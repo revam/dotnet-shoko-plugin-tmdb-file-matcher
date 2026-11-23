@@ -8,6 +8,12 @@ on:
   release:
     types: [published]
 
+# One release at a time: two runs would each fetch the same metadata tip,
+# and the second push would be refused as a non-fast-forward.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   # The published manifest lives on a branch of its own and CI writes
   # nowhere else. A manifest committed to `stable` is a bot commit on the
@@ -31,6 +37,9 @@ env:
   # repository, so the base is the server and repository this run already
   # names rather than a CDN in front of them.
   ASSET_BASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/download
+  # Through the environment rather than an expression inside `run:`: a tag
+  # name may hold `$(` or a backtick, which the shell would run.
+  TAG: ${{ github.event.release.tag_name }}
 
 jobs:
   build:
@@ -57,7 +66,6 @@ jobs:
       # and `tag` disagree. Fail here rather than publish that.
       - name: Check the version matches the tag
         run: |
-          TAG="${{ github.event.release.tag_name }}"
           PROJECT=$(ls source/*.csproj)
           VERSION=$(dotnet msbuild "${PROJECT}" -getProperty:Version -nologo)
           if [ "${TAG#v}" != "${VERSION}" ]; then
@@ -134,7 +142,7 @@ jobs:
           dotnet shoko-build \
             --configuration Release \
             --channel Stable \
-            --tag "${{ github.event.release.tag_name }}" \
+            --tag "${TAG}" \
             --release-notes-path "${RUNNER_TEMP}/release-notes.md" \
             --manifest "${GITHUB_WORKSPACE}/${IDENTITY_MANIFEST}" \
             --output "${GITHUB_WORKSPACE}/dist/{name}-{tag}-{runtime}.zip" \
@@ -143,13 +151,16 @@ jobs:
             -p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
 
       # A glob rather than a name, so an archive per runtime identifier
-      # uploads without touching this step.
+      # uploads without touching this step. `--clobber`, because a re-run
+      # rebuilds the archive, and the manifest records the new one's
+      # checksum: the asset it points at has to be that one.
       - name: Upload to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
+          gh release upload "${TAG}" \
             dist/*.zip \
+            --clobber \
             --repo "${{ github.repository }}"
 
       - name: Commit the manifest on the metadata branch
@@ -181,6 +192,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Manifest unchanged; nothing to commit."
           else
-            git commit -m "ci: update manifest for ${{ github.event.release.tag_name }}"
+            git commit -m "ci: update manifest for ${TAG}"
             git push origin "${METADATA_BRANCH}"
           fi
