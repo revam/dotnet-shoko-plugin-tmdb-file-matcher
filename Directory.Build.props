@@ -1,7 +1,7 @@
 <Project>
     <PropertyGroup>
         <!-- The one place the contract versions are spelled, so the tests run against exactly what the plugin was built for. -->
-        <ShokoAbstractionsVersion>6.0.0-alpha.137</ShokoAbstractionsVersion>
+        <ShokoAbstractionsVersion>6.0.0-alpha.139</ShokoAbstractionsVersion>
         <OfflineImporterAbstractionsVersion>2.0.0</OfflineImporterAbstractionsVersion>
     </PropertyGroup>
 </Project>
