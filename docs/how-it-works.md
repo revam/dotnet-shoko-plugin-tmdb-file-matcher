@@ -145,9 +145,12 @@ searches get nothing: the importer is not installed, or no auto-match rules
 are set up. With both, an automatic match is saved only when the importer's
 `IOfflineAutoMatchService` allows it under those rules.
 
-**Unavailable is not unmatched.** When TMDb cannot be reached,
-`GetRescanDelay` asks core to try again after TMDb's `RetryAfter`, or an
-hour.
+**Unavailable is not unmatched.** When TMDb cannot be reached, the
+provider answers nothing, and `GetRescanDelay` asks core to try again after
+TMDb's `RetryAfter`, or an hour, for an attempt that ran while it could not
+be reached. Core asks that only of a file that has a release, such as one
+another provider found; a file left with none waits for the next search
+of it.
 
 ## The validator
 

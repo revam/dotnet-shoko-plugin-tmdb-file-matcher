@@ -137,13 +137,16 @@ public sealed class TmdbReleaseInfoProvider : IReleaseInfoProvider<TmdbFileMatch
     /// <inheritdoc/>
     /// <remarks>
     ///   A rescan follows only an attempt during which TMDb could not be
-    ///   reached: after its <c>RetryAfter</c>, or an hour.
+    ///   reached, not one that merely came before an outage: after its
+    ///   <c>RetryAfter</c>, or an hour.
     /// </remarks>
     public TimeSpan? GetRescanDelay(IReleaseInfo existingInfo, IReleaseMatchAttempt lastAttempt)
     {
         if (!lastAttempt.AttemptedProviderNames.Contains(ProviderName) || lastAttempt.AttemptCount >= MaxAttempts)
             return null;
-        return Volatile.Read(ref _lastUnavailable) is { } unavailable && unavailable.Item1 >= lastAttempt.AttemptStartedAt ? unavailable.Item2 ?? _defaultRescanDelay : null;
+        if (Volatile.Read(ref _lastUnavailable) is not { } unavailable || unavailable.Item1 < lastAttempt.AttemptStartedAt)
+            return null;
+        return lastAttempt.IsCompleted && unavailable.Item1 > lastAttempt.AttemptEndedAt ? null : unavailable.Item2 ?? _defaultRescanDelay;
     }
 
     // Builds the release for a match; a provisional one defers to the next provider.
