@@ -43,10 +43,11 @@ validator with healing, and a required and an optional plugin dependency.
 ## Install
 
 Add this repository's manifest to Shoko's plugin repositories, then install
-**TMDb File Matcher** from the plugin list. The TMDB plugin it needs comes
-with Shoko, and must be enabled.
+**TMDb File Matcher** from the plugin list. Shoko installs the TMDB plugin
+it needs from its core repository when it is missing, and it must be
+enabled.
 
-<!-- TODO: the manifest URL, once the GitHub repository exists: the raw `manifest.json` on its `metadata` branch. -->
+<!-- TODO: the manifest URL, once the GitHub repository exists: https://raw.githubusercontent.com/<owner>/<repo>/metadata/manifest.json -->
 
 ## Settings
 
@@ -56,6 +57,26 @@ with Shoko, and must be enabled.
 | Provisional score | 60 | The score a hit needs to be saved provisionally. Set it to the accept score to save only accepted matches. |
 | Include restricted entries | off | Whether restricted TMDb entries may match. |
 | Auto-match rules | none | The Offline Importer's rules that allow automatic matching. With none, or without the importer, files are matched only when asked. |
+
+## Limits
+
+- **Episodes, specials and movies only.** Credits, trailers and other kinds
+  of file are not matched, nor is an episode number that is not whole, such
+  as 12.5.
+- **A tag is final.** A TMDb tag that does not resolve ends the match with
+  nothing; the name is not searched instead.
+- **A show is fetched before a file is placed in it.** The first file of a
+  show not yet in Shoko waits up to 30 seconds for a quick refresh of it.
+- **No TMDb, no match.** While TMDb cannot be reached, or the TMDB plugin is
+  paused, files get no match. A file that another provider matched in the
+  meantime is tried again later; one that is left with none waits for its
+  next search.
+- **Searches cost requests.** A file can take a few searches, and looking up
+  the likeliest hits, before it is matched. They go through the TMDB plugin,
+  whose own limits apply, and are kept for an hour, so the files of one
+  folder search once.
+- **No lookup by release ID.** Releases are read from a file's path, so
+  there is no ID to look one up by.
 
 ## Building
 
@@ -67,7 +88,7 @@ dotnet test tests/Shoko.Plugin.TmdbFileMatcher.Tests.csproj
 
 Releases are packed by `shoko-build` in CI when a GitHub release is
 published, and recorded in the manifest on the `metadata` branch; see
-[.github/workflows/release.yml](.github/workflows/release.yml).
+[docs/releasing.md](docs/releasing.md).
 
 ## License
 
