@@ -57,6 +57,9 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
 
     private static readonly TimeSpan _keepFor = TimeSpan.FromHours(1);
 
+    // How many kept answers there may be before the expired ones are dropped.
+    private const int PruneAbove = 1024;
+
     // Search hits and lookups kept for an hour, so the files of one folder search TMDb once.
     private readonly ConcurrentDictionary<string, (DateTime At, object? Value)> _cache = new();
 
@@ -173,7 +176,7 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
         {
             foreach (var query in plan)
             {
-                var hits = await Cached($"{kind.Value}|{TitleFolding.Fold(query.Text)}|{query.Year}", () => catalog.Search(kind, query.Text, query.Year, config.IncludeRestricted, cancellationToken)).ConfigureAwait(false);
+                var hits = await Cached($"{kind.Value}|{TitleFolding.Fold(query.Text)}|{query.Year}|{config.IncludeRestricted}", () => catalog.Search(kind, query.Text, query.Year, config.IncludeRestricted, cancellationToken)).ConfigureAwait(false);
                 var scored = hits.Select(hit => CandidateScorer.Score(hit, file, plan, query, config.IncludeRestricted)).ToList();
                 foreach (var candidate in scored.Where(candidate => WorthLookup(candidate, file, config)).OrderByDescending(candidate => candidate.Score).Take(3).ToList())
                     scored[scored.IndexOf(candidate)] = await WithLookup(candidate, file, plan, config, cancellationToken).ConfigureAwait(false);
@@ -266,6 +269,15 @@ internal sealed class MatchPipeline(PathParser parser, ITmdbCatalog catalog)
             return (T)kept.Value!;
         var value = await fetch().ConfigureAwait(false);
         _cache[key] = (now, value);
+        if (_cache.Count > PruneAbove)
+        {
+            foreach (var (staleKey, stale) in _cache)
+            {
+                if (now - stale.At >= _keepFor)
+                    _cache.TryRemove(staleKey, out _);
+            }
+        }
+
         return value;
     }
 

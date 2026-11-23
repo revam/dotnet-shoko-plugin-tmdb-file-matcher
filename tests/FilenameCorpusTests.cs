@@ -219,6 +219,21 @@ public class FilenameCorpusTests
         Assert.Contains("paused", outcome.Reason);
     }
 
+    [Fact]
+    public async Task TurningOnRestrictedEntries_IsNotAnsweredFromTheCache()
+    {
+        const string path = "Hidden Show (2024)/Season 1/Hidden Show - S01E02.mkv";
+        var hidden = Show("777001", "Hidden Show", 2024, false, seasons: [6]);
+        var catalog = Fixtures().Add(new FakeShow(hidden.Entry with { IsRestricted = true }, hidden.Episodes, false));
+        var pipeline = Pipeline(catalog, new PathParser(null));
+
+        var without = await pipeline.Match([new FileLocation(1, path)], new(), TestContext.Current.CancellationToken);
+        var with = await pipeline.Match([new FileLocation(1, path)], new() { IncludeRestricted = true }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(MatchKind.None, without.Kind);
+        Assert.Equal(MatchKind.Accepted, with.Kind);
+    }
+
     [Theory]
     [InlineData("Tokyo.Revengers.S04E02.Be.Left.Behind.the.Times.1080p.DSNP.WEB-DL.AAC2.0.H.264-NTb.mkv", "Tokyo Revengers")]
     [InlineData("Bleach.S17E50.Thousand-Year.Blood.War.DEATH.and.STRAWBERRY.1080p.DSNP.WEB-DL.AAC2.0.H.264-NTb.mkv", "Bleach")]
