@@ -45,12 +45,9 @@ validator with healing, and a required and an optional plugin dependency.
 
 ## Install
 
-Add this repository's manifest to Shoko's plugin repositories, then install
-**TMDb File Matcher** from the plugin list. Shoko installs the TMDB plugin
-it needs from its core repository when it is missing, and it must be
-enabled.
-
-<!-- TODO: the manifest URL, once the GitHub repository exists: https://raw.githubusercontent.com/<owner>/<repo>/metadata/manifest.json -->
+This plugin is an example, and there are no published releases. Build it
+(below) and install the build yourself. It needs Shoko's TMDB plugin
+installed and enabled.
 
 ## Tagging a path
 
@@ -124,10 +121,6 @@ mise install
 dotnet build Shoko.Plugin.TmdbFileMatcher.slnx --no-incremental
 dotnet test tests/Shoko.Plugin.TmdbFileMatcher.Tests.csproj
 ```
-
-Releases are packed by `shoko-build` in CI when a GitHub release is
-published, and recorded in the manifest on the `metadata` branch; see
-[docs/releasing.md](docs/releasing.md).
 
 ## License
 
